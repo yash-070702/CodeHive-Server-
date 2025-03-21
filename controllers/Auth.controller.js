@@ -3,6 +3,8 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const OTP = require("../models/OTP.model");
 const User = require("../models/User.model");
+const mailSender=require("../utils/mailSender");
+const {passwordUpdated}=require("../mail/templates/passwordUpdate");
 
 exports.sendotp = async (req, res) => {
   try {
@@ -82,7 +84,6 @@ exports.signup = async (req, res) => {
       });
     }
 
-    
     // check kro ki password and confirm password match krrre h ya nhi
     if (password !== confirmPassword) {
       return res.status(400).json({
@@ -194,6 +195,7 @@ exports.login = async (req, res) => {
         httpOnly: true,
         secure: true,
       };
+      user.updatedAt = new Date();
 
       //create cookie and send response
       res.cookie("token", token, options).status(200).json({
@@ -226,3 +228,120 @@ exports.logout = async (req, res) => {
       message: "Logout Successfully",
     });
 };
+
+
+exports.changePassword = async (req, res) => {
+  try {
+    // Get user data from req.user
+    const userDetails = await User.findById(req.user.id);
+
+    // Get old password, new password, and confirm new password from req.body
+    const { oldPassword, newPassword } = req.body;
+
+    // Validate old password
+    const isPasswordMatch = await bcrypt.compare(
+      oldPassword,
+      userDetails.password
+    );
+    if (!isPasswordMatch) {
+      // If old password does not match, return a 401 (Unauthorized) error
+      return res
+        .status(401)
+        .json({ success: false, message: "The password is incorrect" });
+    }
+
+    // Update password
+    const encryptedPassword = await bcrypt.hash(newPassword, 10);
+    const updatedUserDetails = await User.findByIdAndUpdate(
+      req.user.id,
+      { password: encryptedPassword },
+      { new: true }
+    );
+
+    // Send notification email
+    try {
+      const emailResponse = await mailSender(
+        updatedUserDetails.email,
+        "Password for your account has been updated",
+        passwordUpdated(
+          updatedUserDetails.email,
+          `Password updated successfully for ${updatedUserDetails.fullName}`
+        )
+      );
+      console.log("Email sent successfully:", emailResponse.response);
+    } catch (error) {
+      // If there's an error sending the email, log the error and return a 500 (Internal Server Error) error
+      console.error("Error occurred while sending email:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Error occurred while sending email",
+        error: error.message,
+      });
+    }
+
+    // Return success response
+    return res
+      .status(200)
+      .json({ success: true, message: "Password updated successfully" });
+  } catch (error) {
+    // If there's an error updating the password, log the error and return a 500 (Internal Server Error) error
+    console.error("Error occurred while updating password:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error occurred while updating password",
+      error: error.message,
+    });
+  }
+};
+
+exports.resetPasswordToken=async(req,res)=>{
+  try{
+//get email from req body
+const email=req.body.email;
+
+// check user with is mail exist or not 
+const user=await User.findOne({email:email});
+
+if(!user){
+return res.json({
+  success:false,
+  message:"Your entered email is not registered with us",
+});
+
+}
+//generate token
+const token =crypto.randomUUID();
+
+//updtae user by adding token and expiry time 
+const updatedDetails=await User.findOneAndUpdate(
+                          {email:email},
+                          {
+                              token:token,
+                              resetPasswordExpires:Date.now() + 5*60*1000,
+
+                          },
+                          {new:true}
+                           );
+console.log("DETAILS", updatedDetails);
+//create url
+const url=`http://localhost:4000/update-password/${token}`
+
+//send mail containing the url
+await mailSender(email, 
+"Password Reset Link",
+`Password Reset Link:${url}`
+)
+
+//return response
+return res.json({
+success:true,
+message:"Email sent Successfully,please check email and change Password",
+})
+  }
+  catch(error){
+return res.status(500).json({
+success:false,
+message:"Something went wrong",
+})
+  }
+}

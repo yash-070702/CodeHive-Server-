@@ -11,6 +11,7 @@ const authRoutes = require("./routes/Auth.routes");
 const questionRoutes = require("./routes/Question.routes");
 const answerRoutes = require("./routes/Answer.routes");
 const commentRoutes = require("./routes/Comment.routes");
+const userRoutes = require("./routes/User.routes");
 const app = express();
 
 const PORT = process.env.PORT || 4000;
@@ -37,6 +38,7 @@ app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/question", questionRoutes);
 app.use("/api/v1/answer", answerRoutes);
 app.use("/api/v1/comment", commentRoutes);
+app.use("/api/v1/user", userRoutes);
 
 app.get("/", (req, res) => {
   return res.json({

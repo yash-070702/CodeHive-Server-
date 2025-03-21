@@ -6,6 +6,7 @@ const Comment = require("../models/Comments.model");
 exports.createAnswer = async (req, res) => {
   try {
     const { questionId, content } = req.body;
+    console.log(req.user);
     const userId = req.user.id; // Extract user ID from the request object
 
     if (!questionId || !content) {
@@ -174,6 +175,96 @@ exports.deleteAnswer = async (req, res) => {
     return res
       .status(200)
       .json({ success: true, message: "Answer deleted successfully" });
+  } catch (error) {
+    console.error(error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
+  }
+};
+
+exports.voteAnswer = async (req, res) => {
+  try {
+    const { answerId } = req.params;
+    const { voteType } = req.body; // "upvote" or "downvote"
+    const userId = req.user.id; // Authenticated user
+
+    // Find the answer
+    const answer = await Answer.findById(answerId);
+    if (!answer) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Answer not found" });
+    }
+
+    // Ensure user is not voting on their own answer
+    if (answer.user.toString() === userId) {
+      return res.status(403).json({
+        success: false,
+        message: "You cannot vote on your own answer",
+      });
+    }
+
+    let reputationChange = null;
+
+    // Upvote logic
+    if (voteType === "upvote") {
+      if (answer.upvotes.includes(userId)) {
+        return res.status(400).json({
+          success: false,
+          message: "You have already upvoted this answer",
+        });
+      }
+
+      // If user had previously downvoted, remove downvote first
+      if (answer.downvotes.includes(userId)) {
+        answer.downvotes = answer.downvotes.filter(
+          (id) => id.toString() !== userId
+        );
+        await updateUserReputation(answer.user, "downvote"); // Reverse downvote penalty
+      }
+
+      answer.upvotes.push(userId);
+      reputationChange = "upvote";
+    }
+    // Downvote logic
+    else if (voteType === "downvote") {
+      if (answer.downvotes.includes(userId)) {
+        return res.status(400).json({
+          success: false,
+          message: "You have already downvoted this answer",
+        });
+      }
+
+      // If user had previously upvoted, remove upvote first
+      if (answer.upvotes.includes(userId)) {
+        answer.upvotes = answer.upvotes.filter(
+          (id) => id.toString() !== userId
+        );
+        await updateUserReputation(answer.user, "removeUpvote"); // Remove upvote reward
+      }
+
+      answer.downvotes.push(userId);
+      reputationChange = "downvote";
+    } else {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid vote type" });
+    }
+
+    await answer.save();
+
+    // Update reputation only if a valid vote action occurred
+    if (reputationChange) {
+      await updateUserReputation(answer.user, reputationChange);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Vote recorded successfully",
+      upvotes: answer.upvotes.length,
+      downvotes: answer.downvotes.length,
+    });
   } catch (error) {
     console.error(error);
     return res

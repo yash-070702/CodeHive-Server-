@@ -7,7 +7,11 @@ const {
     signup,
     sendotp,
     logout,
+    changePassword,
+    resetPasswordToken,
   } = require("../controllers/Auth.controller");
+
+  const { auth } = require("../middlewares/Auth.middleware");
 
   // Routes for Login, Signup, and Authentication
 
@@ -26,8 +30,10 @@ router.post("/signup", signup)
 // Route for sending OTP to the user's email
 router.post("/sendotp", sendotp)
 
-router.post("/logout", logout)
+router.post("/logout", logout);
 
+router.put("/changePassword",auth, changePassword);
 
+router.post("/reset-password-token", resetPasswordToken)
 
 module.exports = router

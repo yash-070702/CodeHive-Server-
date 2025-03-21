@@ -25,5 +25,9 @@ const commentSchema = new mongoose.Schema({
     default: Date.now,
   },
 });
+commentSchema.pre('findOneAndUpdate', function (next) {
+  this.set({ updatedAt: Date.now() });
+  next();
+});
 
 module.exports = mongoose.model('Comment', commentSchema);
